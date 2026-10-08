@@ -25,21 +25,18 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
-
+Users could use keywords that will not match,  the item might be there but the search might not find it because the words are different. This path makes two model calls thatb call to Gemini and either can fail. An api could also hit its rate limit and have a network problem or timeout.
 ---
 
 ## 2. An impossible query stops before the second tool
 
 Given a query that matches no listings, the agent stops before calling
-`suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
+suggest_outfit and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
 
+
+This path doesn't use Gemini, so the result is the same every time. If it doesn't work  that can be a bug on my code.
 ---
 
 ## 3. Something about state
@@ -58,26 +55,22 @@ Given a query that matches no listings, the agent stops before calling
 
 **Why this target:**
 
+Given a query that matches at least one listing, the `id` of session["selected_item"] is the same as the `id` of the item  suggested_outfit  received — in  5  of 5 tries.
 
+**Why this target:**  Because this dosn't call Gemini, it should return the same every time.
 
 ---
 
 ## 4. Something about the fit card
 
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
+Given a query that matches at least one listing, the fit card mentions the item's price — in 4 of 5 tries.
 
 
 
-**Why this target:**
+
+
+
+**Why this target:** The fit card calls Gemini, so the wording changes each time and I allow one miss. Gemini might leave the price out once, even though the prompt asks for it. If it's missing more than once, that means my prompt isn't clear enough.
 
 
 
@@ -92,9 +85,14 @@ Given a query that matches no listings, the agent stops before calling
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
 
+Given a query that matches at least one listing and an invalid GEMINI_API_KEY, the agent shows a message naming GEMINI_API_KEY instead of crashing — in 5 of 5 tries.
+
+With a fake key Gemini rejects you every single time, it isn't random so 5 of 5 works best for this case.
+
 
 
 **Why this target:**
+With a fake key Gemini rejects you every single time, it isn't random,and handling the rejection is my own code, so if it ever crashes, that's a bug in my error handling.
 
 
 
