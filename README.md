@@ -59,24 +59,25 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches the listings for items that match a description, with an optional size and price ceiling.
+- **Inputs:** `description` (str), `size` (str or None), `max_price` (float or None)
+- **Returns:** A list of matching listing dicts, best match first, at most 10 results. Each dict includes: id, title, description, category, style_tags (list), size, condition, price (float), colors (list), brand (str or None), platform.
+- **When it has nothing:** It returns an empty list when nothing matches — an empty list, not None, and not an exception.
+- **Size rule:** The requested size has to equal one whole option in the listing's size, ignoring case. "S/M" counts as S and M, and notes in brackets are ignored ("XL (oversized)" is XL). It's never a substring test, so "L" doesn't match "XL" and "S" doesn't match "US 9". "One Size" listings only match a request for "one size".
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Uses the AI model to suggest one or two outfits that pair a thrifted item with pieces the user already owns.
+- **Inputs:** `new_item` (dict): the listing the user is thinking about buying; `wardrobe` (dict): the user's clothes in an `items` list, which may be empty
+- **Returns:** A non-empty string with one or two outfit suggestions that name pieces from the user's wardrobe.
+- **When it has nothing:** With an empty wardrobe, it returns general styling advice for the item, instead of raising an error or returning an empty string.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Uses the AI model to write a short caption someone would actually post about the find.
+- **Inputs:** `outfit` (str): the outfit suggestion from `suggest_outfit`; `new_item` (dict): the listing for the item
+- **Returns:** A string with a 2–4 sentence caption that reads like a real post. It mentions the item, price, and platform.
+- **When it has nothing:** If `outfit` is empty or whitespace, it returns a message explaining the outfit is missing, instead of raising an error.
 
 ---
 
@@ -94,12 +95,24 @@
      function have to be real. -->
 
 **Branch rule:**
+If search_listings returns an empty list, put a message in session["error"] naming what the user could change, and return the session without calling suggest_outfit. Otherwise take the first result, put it in session["selected_item"], and continue.
 
 **Where it lives:** `agent.py::run_agent`
 
 **How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+Regex, not a model call. It costs nothing and gives the same answer every time and the mistakes are easy to trace (through patterns). Wording that won't be recognized: "nothing over thirty dollars", it gives no price.
 
 **What moves through the session:** <!-- which fields, in what order -->
+
+- `query` — new_session — what the user typed
+- `wardrobe` — new_session — the user's clothes
+- `parsed` — parse_query — description, size, max_price
+- `search_results` — search_listings — the matching listings
+- `error` — the branch — a message is set here if the search came up empty, and the loop stops
+- `selected_item` — the loop — the first search result
+- `outfit_suggestion` — suggest_outfit — the outfit text
+- `fit_card` — create_fit_card — the caption
+
 
 ---
 
@@ -113,25 +126,54 @@
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30, size M'
+[1] parse_query
+      in:  vintage graphic tee under $30, size M
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: 8 items: Y2K Baby Tee — Butterfly Print, Mesh Long-Sleeve Top — Black, 90s Silk Slip Dress — Floral, Midi Length … +5 more
+      →    8 match(es)
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Hey there! That Y2K baby tee is an absolute steal, and you are going to get so much wear out of it. Here are t…
+      →    10 wardrobe item(s)
+[5] create_fit_card
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Obsessed with this little butterfly tee I just scored on depop for eighteen bucks. Paired it with baggy jeans …
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Hey there! That Y2K baby tee is an absolute steal, and you are going to get so much wear out of it. Here are two super fun ways to style it using pieces you already own!
+
+Outfit one is all about that classic early 2000s contrast. Pair the baby tee with your baggy straight-leg jeans, dark wash. Tuck the tee in and add your chunky white sneakers to keep it casual and comfy. Throw on the black crossbody bag to finish the look.
+
+Outfit two leans into a cool grunge mix. Layer your vintage black denim jacket right over the baby tee, and pair them with your wide-leg khaki trousers. Lace up your black combat boots to give the sweet butterfly print a nice edgy finish.
+
+  Fit card: Obsessed with this little butterfly tee I just scored on depop for eighteen bucks. Paired it with baggy jeans and chunky sneakers for the ultimate cozy y2k day. 🦋✨
+
+0 model calls this session, 2 served from cache
 ```
 
 **The three tools, tested one at a time**
 
 ```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'description': 'Super cute early 2000s baby tee with butterfly graphic. Fitted crop length. Tag says medium but fits like a small.', 'category': 'tops', 'style_tags': ['y2k', 'vintage', 'graphic tee', 'cottagecore'], 'size': 'S/M', 'condition': 'excellent', 'price': 18.0, 'colors': ['white', 'pink', 'purple'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'description': 'Vintage-style bootleg tee with faded graphic. Slightly boxy fit. 100% cotton, soft and worn-in.', 'category': 'tops', 'style_tags': ['graphic tee', 'vintage', 'grunge', 'streetwear', 'band tee'], 'size': 'L', 'condition': 'good', 'price': 24.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'description': 'Sheer black mesh long-sleeve. Great for layering under a graphic tee or over a bralette. Stretchy material, fits true to size.', 'category': 'tops', 'style_tags': ['y2k', 'grunge', 'goth', 'layering'], 'size': 'S/M', 'condition': 'excellent', 'price': 15.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'description': 'Faded grey band-style tee with distressed graphic. Crew neck. Fits boxy. Well-loved but no holes or major damage.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'band tee', 'graphic tee', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 19.0, 'colors': ['grey', 'charcoal'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_011', 'title': 'Low-Rise Cargo Pants — Khaki', 'description': 'Y2K era low-rise cargo pants. Lots of pockets. Khaki color, slightly distressed at the hems. Great for layering with a long tee.', 'category': 'bottoms', 'style_tags': ['y2k', 'cargo', '2000s', 'streetwear'], 'size': 'W29', 'condition': 'fair', 'price': 27.0, 'colors': ['khaki', 'tan'], 'brand': None, 'platform': 'poshmark'}, {'id': 'lst_012', 'title': 'Oversized Crewneck Sweatshirt — Vintage Navy', 'description': 'Perfectly faded navy crewneck. Genuinely vintage — not manufactured distressed. Ribbed cuffs and hem. No graphics, clean.', 'category': 'tops', 'style_tags': ['vintage', 'basics', 'oversized', 'classic'], 'size': 'XL (fits oversized)', 'condition': 'good', 'price': 20.0, 'colors': ['navy'], 'brand': None, 'platform': 'thredUp'}, {'id': 'lst_015', 'title': 'Vintage Graphic Hoodie — Faded Black', 'description': 'Faded black pullover hoodie with barely-visible vintage graphic on the chest. Cozy interior. Some pilling but adds to the worn-in look.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'graphic', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 26.0, 'colors': ['black', 'charcoal'], 'brand': None, 'platform': 'depop'}]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+Grab those Vintage Levi's 501 Jeans and tuck in your white ribbed tank top. Add the brown leather belt to define your waist, slip on your chunky white sneakers, and throw your vintage black denim jacket over top for a casual, effortless look. Finish it off with your black crossbody bag for running errands.
 
+For a cozier vibe, layer your oversized grey crewneck sweatshirt right over the jeans. Pair this relaxed combination with your black combat boots for a tough, streetwear-inspired edge, and wear your black crossbody bag to keep your hands free.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Scored these vintage Levi's 501 jeans on Depop for just $38 and I am obsessed. Threw them on with my favorite white sneakers for the ultimate effortless weekend fit. The knee fading gives them the best lived-in streetwear vibe. 👖👟
 ```
 
 ---
@@ -147,15 +189,15 @@ $ python -c "from tools import create_fit_card; ..."
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I was behind on time, so I asked Claude (Claude Code) to implement all three tools in `tools.py` from the docstrings and my Tool Inventory. The planning loop in `agent.py` is not AI-written — I pasted it from the instructor session.
+- *What came back:* Working versions of `search_listings`, `suggest_outfit` and `create_fit_card`, tested from the terminal. Claude chose the size rule (whole options only, so "L" doesn't match "XL" and "S" doesn't match "US 9").
+- *What I changed:* <!-- fill in after reviewing the code -->
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* Feedback on my Tool Inventory and Planning Loop drafts in this README.
+- *What came back:* My `search_listings` Returns line only said "a list of matching listing dicts," and my `suggest_outfit` Inputs had no types. Claude pointed out that the rubric needs what's in the list and each input's type.
+- *What I changed:* I added the listing fields, the order and the 10-result limit to Returns, and wrote each input as name (type).
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
