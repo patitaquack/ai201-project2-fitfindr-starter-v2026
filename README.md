@@ -188,16 +188,15 @@ Scored these vintage Levi's 501 jeans on Depop for just $38 and I am obsessed. T
      instead of an empty list, so I changed it" is the level we want. -->
 
 **Moment 1**
+ After writing the criteria, I asked claude to check it for me and to correct me if I didn't have the right understanding and explanations for each one.
 
-- *What I asked for:* I was behind on time, so I asked Claude (Claude Code) to implement all three tools in `tools.py` from the docstrings and my Tool Inventory. The planning loop in `agent.py` is not AI-written — I pasted it from the instructor session.
-- *What came back:* Working versions of `search_listings`, `suggest_outfit` and `create_fit_card`, tested from the terminal. Claude chose the size rule (whole options only, so "L" doesn't match "XL" and "S" doesn't match "US 9").
-- *What I changed:* <!-- fill in after reviewing the code -->
+-
 
 **Moment 2**
 
-- *What I asked for:* Feedback on my Tool Inventory and Planning Loop drafts in this README.
-- *What came back:* My `search_listings` Returns line only said "a list of matching listing dicts," and my `suggest_outfit` Inputs had no types. Claude pointed out that the rubric needs what's in the list and each input's type.
-- *What I changed:* I added the listing fields, the order and the 10-result limit to Returns, and wrote each input as name (type).
+I had claude help me understand better the ste- by -step practice the agent follows after a query. As I got confused with what the end goal was and how each function works.
+
+
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
