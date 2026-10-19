@@ -35,18 +35,31 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
+    {
+        # Criterion 3 — state. Any normal query works; what gets checked is
+        # that session["selected_item"] is the item suggest_outfit received.
+        "name": "selected item reaches suggest_outfit",
+        "query": "black denim jacket under $60",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Criterion 4 — the fit card. The same query five times, so the same
+        # item ($35 Knit Cardigan) goes to create_fit_card five times.
+        "name": "fit card mentions the price",
+        "query": "knit cardigan under $45",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        # Criterion 5 — model unavailable. A matching query with a key Gemini
+        # will reject. run_eval.py swaps the key in for this scenario only.
+        "name": "invalid API key names GEMINI_API_KEY",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 5,
+        "env": {"GEMINI_API_KEY": "invalid-key-for-testing"},
+    },
 ]
 
 WARDROBES = ("example", "empty")

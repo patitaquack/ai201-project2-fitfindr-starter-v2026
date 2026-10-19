@@ -212,17 +212,82 @@ I had claude help me understand better the ste- by -step practice the agent foll
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. `selected_item` id equals the id `suggest_outfit` received | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The fit card mentions the item's price | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. An invalid key gives a message naming GEMINI_API_KEY, no crash | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+Source: `python run_eval.py --label before`, caching off, 45 real model calls. The full output is in [results/run_2026-10-19_0935_before.md](results/run_2026-10-19_0935_before.md). The scenarios are in `scenarios.py`, one per criterion, plus an empty-wardrobe diagnostic run that isn't one of the five.
+
+How I scored each try:
+- **1:** `session["error"]` is None and `session["fit_card"]` is a non-empty string.
+- **2:** `session["error"]` names what to change, `suggest_outfit` was never called, and `fit_card` is None.
+- **3:** I wrapped `agent.suggest_outfit` to record the `id` of the item it was actually called with, then compared that to `session["selected_item"]["id"]`. It was `lst_007` both times, on every try.
+- **4:** the card contains the price as a number (`$35` for the $35.0 Knit Cardigan). All five cards were different, so these were real calls, not cached answers.
+- **5:** no exception, `session["error"]` contains `GEMINI_API_KEY`, and `fit_card` is None. The bad key was set for this scenario only, through its `env` key in `scenarios.py`.
+
+**Real output from one try** (Try 1 of each), pasted as text, naming the file and function that produced it:
+
+**Criterion 1:** `agent.py::run_agent`, trace from `trace.py`. The fit card is from `tools.py::create_fit_card`.
 
 ```
+[2] search_listings (via MCP)
+      in:  {'description': 'vintage graphic tee', 'size': None, 'max_price': 30.0}
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[5] create_fit_card
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
 
+fit_card: Just scored this little butterfly baby tee on Depop for $18 and I am obsessed. Styled it with baggy denim and chunky sneakers for the ultimate Y2K throwback moment. 🦋✨
+```
+
+**Criterion 2:** `agent.py::run_agent`, with the message from `agent.py::_nothing_found_message`.
+
+```
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    0 match(es)
+[3] branch
+      →    search returned []: stopping before suggest_outfit
+
+error: Nothing in the listings matched description 'designer ballgown', size XXS, under $5.
+Things to change: try broader words — 'jacket' finds more than 'cropped corduroy jacket'; drop the size, or try a neighbouring one; raise the price ceiling above $5.
+fit_card: None
+```
+
+**Criterion 3:** `agent.py::run_agent` (the session), with what `tools.py::suggest_outfit` was actually called with.
+
+```
+[3] select_item
+      out: Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+[4] suggest_outfit
+      in:  Denim Jacket — Light Wash, Cropped ($42.0, poshmark)
+
+session["selected_item"]["id"]: lst_007
+id received by suggest_outfit:  lst_007
+```
+
+**Criterion 4:** `tools.py::create_fit_card`, for the Knit Cardigan, Chunky Brown ($35.0, depop).
+
+```
+Living in this chunky brown cardigan from Depop now that it’s finally sweater weather. For just $35, it throws the ultimate cozy, earth-toned vibe over my favorite white tank and baggy jeans. Grabbed my trusty coffee and I'm ready to take on the day ☕️🤎
+```
+
+**Criterion 5:** `agent.py::run_agent`, in the `except ModelUnavailable` handler. The text from the service is from `generate.py::_explain`.
+
+```
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] model unavailable
+      →    stopping, search results kept
+
+error: The model couldn't be reached, so the outfit and caption steps didn't run. The search worked — 10 listing(s) were found. Check GEMINI_API_KEY in your .env, then run the same query again.
+What the service said: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
 ```
 
 ---

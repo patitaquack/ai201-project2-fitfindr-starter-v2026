@@ -51,11 +51,29 @@ def run_once(scenario, use_trace=True):
         trace_module.start_trace()
 
     record = {"error": None, "session": None, "trace": "", "crashed": None}
+    # A scenario can override environment variables for its own tries — e.g. a
+    # bad GEMINI_API_KEY for the model-unavailable criterion. The model client
+    # is built once and reused, so it's reset on the way in and the way out.
+    import os
+    import generate
+    overrides = scenario.get("env") or {}
+    saved = {k: os.environ.get(k) for k in overrides}
+    os.environ.update(overrides)
+    if overrides:
+        generate._client = None
     try:
         record["session"] = run_agent(scenario["query"], wardrobe)
     except Exception as exc:  # noqa: BLE001 — a crash is a result worth logging
         record["crashed"] = f"{type(exc).__name__}: {exc}"
         record["traceback"] = traceback.format_exc()
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        if overrides:
+            generate._client = None
 
     if use_trace:
         record["trace"] = trace_module.get_trace()
