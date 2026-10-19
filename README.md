@@ -274,13 +274,36 @@ that produced it:
 **Happy path**
 
 ```
-
+[1] parse_query
+      in:  looking for a vintage graphic tee under $30
+      out: {'description': 'looking for a vintage graphic tee', 'size': None, 'max_price': 30.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'looking for a vintage graphic tee', 'size': None, 'max_price': 30.0}
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    10 match(es)
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Hey there! That Y2K baby tee is an absolute steal, and you are going to get so much wear out of it. Here are t…
+      →    10 wardrobe item(s)
+[5] create_fit_card
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Obsessed with this little butterfly tee I just scored on depop for eighteen bucks. Paired it with baggy jeans …
 ```
 
 **Empty search**
 
 ```
-
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+[2] search_listings (via MCP)
+      in:  {'description': 'designer ballgown', 'size': 'XXS', 'max_price': 5.0}
+      out: [] (empty)
+      →    0 match(es)
+[3] branch
+      →    search returned []: stopping before suggest_outfit
 ```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
@@ -288,7 +311,9 @@ behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
+I moved `search_listings` onto MCP. In `mcp_server.py` it's registered with `@mcp.tool()` and the same typed inputs as the Tool Inventory: `description: str`, `size: str | None`, `max_price: float | None`. Its description gives units (US dollars, inclusive), explains the size rule, and states the empty case (`[]`, not null or an error). `python mcp_client.py` lists the tool with `description: string`, `size: string (optional)`, `max_price: number (optional)`.
 
+In `agent.py`, `_search()` now calls `call_tool("search_listings", {...})` instead of calling the function directly, and falls back to the direct call if MCP can't be reached. Nothing behaved differently afterwards. I compared MCP and direct results for three queries (a match, an empty search, and a size-filtered search), and they were `==` equal every time: same list of dicts, same order, and `[]` stays a list rather than turning into `None` or a string. So the empty-list branch still fires over MCP. One thing to watch: the fallback means a broken server would fail silently. That's why I checked equality directly instead of only checking that a query still produced output.
 
 ---
 
