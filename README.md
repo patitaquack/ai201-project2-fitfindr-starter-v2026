@@ -190,6 +190,14 @@ Scored these vintage Levi's 501 jeans on Depop for just $38 and I am obsessed. T
 
 I had claude help me understand better the ste- by -step practice the agent follows after a query. As I got confused with what the end goal was and how each function works.
 
+**Unit 4, Moment 1**
+
+I asked Claude to help diagnose my run log. It said `black denim jacket under $60` picked a light-wash jacket because the search let "denim" and "jacket" outscore "black". When it checked the listings data, that turned out to be wrong: there's no black denim jacket under $60. Three listings tie at 2 of 3 keywords, and file order picks the winner. I kept the corrected version in my diagnosis. What I took from it: a confident explanation isn't a diagnosis until it's checked against the data.
+
+**Unit 4, Moment 2**
+
+Claude committed its changes to my repo without asking during the first three milestones. Because the commit history is part of my grade, I told it to stop committing, and to tell me which files it changed so I can review them before I commit them myself.
+
 
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
@@ -312,13 +320,28 @@ What the service said: The model rejected your API key. Check GEMINI_API_KEY in 
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools and returns a fit card | 4 of 5 | MET (5/5) | All 5 tries ended with `session["error"]` None and a non-empty `fit_card`. The 5 cards were all different, so these were real model calls, not cached. |
+| 2 | An impossible query stops before `suggest_outfit` and names what to change | 5 of 5 | MET (5/5) | All 5 tries set `session["error"]` with the "Things to change" list. `suggest_outfit` was never called and `fit_card` stayed None. |
+| 3 | The `id` of `session["selected_item"]` equals the `id` of the item `suggest_outfit` received | 5 of 5 | MET (5/5) | A wrapper on `agent.suggest_outfit` recorded the id it was actually called with: `lst_007` every time, the same as `selected_item`. |
+| 4 | The fit card mentions the item's price | 4 of 5 | MET (5/5) | All 5 cards contained `$35` for the $35.0 Knit Cardigan. I only counted the price written as a number. |
+| 5 | An invalid `GEMINI_API_KEY` gives a message naming `GEMINI_API_KEY`, with no crash | 5 of 5 | MET (5/5) | All 5 tries returned a session with no exception. `session["error"]` contained `GEMINI_API_KEY`, and `fit_card` was None. |
 
 **Diagnoses**
+
+Nothing missed, so there's no miss to diagnose. I read each verdict plainly: every PASS cell meets the criterion as written, with no generous reading needed.
+
+**Were my targets low?** Partly, yes.
+
+- **Criteria 2, 3 and 5 are deterministic.** No model output affects them, so 5 of 5 was the only honest target. Meeting them shows the branch, the session and the error handler work. It doesn't show the agent is good.
+- **Criterion 1's 4 of 5** left room for a rate limit or a timeout. Neither happened in 45 real calls, and `generate.py` retries rate limits. 4 of 5 was cautious, but it's tied to a real way the run can fail, so I'd keep it.
+- **Criterion 4 is the one I'd tighten.** I set 4 of 5 to allow one miss, but the miss never had a chance. I tested one item, five times, and that item has a round price and a brand. The prompt in `tools.py::create_fit_card` says to mention the price outright, so 4 of 5 on a single item was an easy bar. A tighter version: *"For 5 different matching items, including at least two with `brand` None, each fit card states the item's exact price as a number, in 5 of 5."* This tests the prompt across items instead of repeating one lucky case. It's also stricter about format: in an earlier run, `suggest_outfit` wrote the price as "eighteen bucks", so the model doesn't always use a number.
+
+**A pattern the criteria didn't catch:** every criterion checks that a step ran, or that something was passed on correctly. None of them check how good a match the item is. In the criterion 3 run, `black denim jacket under $60` picked `Denim Jacket — Light Wash, Cropped`. No listing in the data matches all three words. `tools.py::_keyword_score` gives one point per matching keyword, and three listings tie at 2 of 3: the light-wash denim jacket (denim + jacket), `Straight Leg Black Jeans` (black + denim) and `90s Leather Bomber — Black` (black + jacket, but $75, so the price filter drops it). Two problems follow:
+
+1. **The tie is broken by file order.** `sorted()` is stable, so whichever listing comes first in the data wins. Here that gave a sensible pick, a jacket. But nothing in the code prefers the item's type ("jacket") over its color ("black"), so a different data order could have recommended jeans.
+2. **The loop treats a partial match as a full match.** The branch only checks whether the list is empty. So the user asked for black, got light blue, and nothing told them that "black" wasn't matched.
+
+Criterion 1 still passes, because something matched and the run finished. This is a gap in what I chose to measure, not a criterion that was measured wrongly, so I've noted it here rather than revising one of the five.
 
 
 
@@ -449,6 +472,18 @@ What the service said: The model rejected your API key. Check GEMINI_API_KEY in 
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
+
+**No criterion is still missed:** all five were MET (5/5) in the before run. That doesn't mean nothing is broken. These are the problems I know about that my criteria don't catch:
+
+1. **Ties in search are broken by file order.** `black denim jacket under $60` has no full match, and three listings tie at 2 of 3 keywords. `tools.py::search_listings` keeps whichever comes first in the data. *What I'd do:* break ties by whether the listing's `category` matches a query word, so "jacket" beats "black" when the user names an item type. Then add a criterion: for 5 queries naming a category, the selected item's category matches in 5 of 5.
+2. **A partial match is shown as if it were a full match.** The branch in `agent.py::run_agent` only checks whether the result list is empty, so the user who asked for black got light blue without being told. *What I'd do:* record which query words the selected item didn't match, and say so in the output ("no black denim jackets; this is the closest").
+3. **Criterion 4 was tested on one item.** I passed it 5 of 5, but always with the same $35 cardigan, which has a brand. I'd re-run it on 5 different items, including at least two with `brand` None, before trusting it.
+4. **The model-unavailable message only helps a developer.** "Check GEMINI_API_KEY in your .env" means nothing to someone using the app, and it says the search found listings without showing them. *What I'd do:* show the found listings, with a plain message that styling suggestions are unavailable right now.
+5. **The MCP fallback is silent.** If `mcp_server.py` breaks, `agent.py::_search` quietly calls `search_listings` directly, and the trace still says "via MCP". *What I'd do:* make the trace record which path actually ran.
+
+**Why I stopped here:** none of these made a criterion miss, and the unit asks for one improvement, measured properly. I kept the rest as a list rather than fixing several things at once and not being able to tell which change did what.
+
+**On the MCP move:** I moved `search_listings` behind `mcp_server.py` and changed `agent.py::_search` to call `call_tool("search_listings", ...)`. Nothing behaved differently: the MCP and direct calls returned `==` equal results for a matching query, an empty one and a size-filtered one, including `[]` for no match. The details are under Loop Trace.
 
 
 
