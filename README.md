@@ -315,6 +315,38 @@ I moved `search_listings` onto MCP. In `mcp_server.py` it's registered with `@mc
 
 In `agent.py`, `_search()` now calls `call_tool("search_listings", {...})` instead of calling the function directly, and falls back to the direct call if MCP can't be reached. Nothing behaved differently afterwards. I compared MCP and direct results for three queries (a match, an empty search, and a size-filtered search), and they were `==` equal every time: same list of dicts, same order, and `[]` stays a list rather than turning into `None` or a string. So the empty-list branch still fires over MCP. One thing to watch: the fallback means a broken server would fail silently. That's why I checked equality directly instead of only checking that a query still produced output.
 
+### Failure modes, triggered on purpose
+
+I triggered each failure separately, using a new query each time so nothing came from the cache. None of them crashed, hung or went silent, so I didn't need a new handler. The handlers were already in place: the empty-list branch in `run_agent`, the empty-wardrobe prompt in `suggest_outfit`, and the `except ModelUnavailable` around the loop.
+
+**1. Empty search:** `python app.py ask 'sequined astronaut suit size XXS under $3'`
+
+The run stopped after the search (3 trace steps, versus 5 on the happy path), and `suggest_outfit` was never called. What the agent said:
+
+```
+Nothing in the listings matched description 'sequined astronaut suit', size XXS, under $3.
+Things to change: try broader words — 'jacket' finds more than 'cropped corduroy jacket'; drop the size, or try a neighbouring one; raise the price ceiling above $3.
+```
+
+**2. Empty wardrobe:** `python app.py ask 'black denim jacket under $60' --empty-wardrobe`
+
+The trace shows `0 wardrobe item(s)` going into `suggest_outfit`, and it still returned a real suggestion, not a crash or an empty string. It suggested general pieces to pair with the jacket (a black ribbed tank, parachute cargo pants, a floral midi dress) instead of claiming items the user owns. What the agent said, first lines:
+
+```
+Hey there! A cropped Wrangler jacket with structured shoulders is such a fun find. Here are two easy ways to style it.
+
+Outfit one leans into that cool streetwear vibe. Throw the jacket over a fitted black ribbed tank top and baggy gray parachute cargo pants. ...
+```
+
+**3. Model unavailable:** `GEMINI_API_KEY=<bad key> python app.py ask 'cozy wool cardigan under $45'` (a new query, so the cache didn't answer it)
+
+The search and item selection still ran, because they don't need the model. Then the loop stopped at `[4] model unavailable` and kept the search results, without a stack trace or a hang. What the agent said:
+
+```
+The model couldn't be reached, so the outfit and caption steps didn't run. The search worked — 2 listing(s) were found. Check GEMINI_API_KEY in your .env, then run the same query again.
+What the service said: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
+```
+
 ---
 
 ## The Improvement
